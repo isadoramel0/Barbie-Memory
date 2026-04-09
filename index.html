@@ -395,22 +395,10 @@
   </header>
 
   <div class="stats">
-    <div class="stat">
-      <div class="stat-label">Tentativas</div>
-      <div class="stat-value" id="s-attempts">0</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Pares</div>
-      <div class="stat-value" id="s-pairs">0</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Tempo</div>
-      <div class="stat-value" id="s-time">0s</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Pontuação</div>
-      <div class="stat-value" id="s-score">0</div>
-    </div>
+    <div class="stat"><div class="stat-label">Tentativas</div><div class="stat-value" id="s-attempts">0</div></div>
+    <div class="stat"><div class="stat-label">Pares</div><div class="stat-value" id="s-pairs">0</div></div>
+    <div class="stat"><div class="stat-label">Tempo</div><div class="stat-value" id="s-time">0s</div></div>
+    <div class="stat"><div class="stat-label">Pontuação</div><div class="stat-value" id="s-score">0</div></div>
   </div>
 
   <div class="difficulty">
@@ -420,22 +408,15 @@
   </div>
 
   <div id="timer-bar-wrap"><div id="timer-bar"></div></div>
-
-  <div class="rules">
-    💅 Vire duas cartas por vez · Pares certos ficam revelados · Menos tentativas = mais pontos!
-  </div>
-
+  <div class="rules">💅 Vire duas cartas por vez · Pares certos ficam revelados!</div>
   <div id="grid"></div>
-
   <button class="btn-restart" onclick="restartGame()">🎀 Nova Partida</button>
 </div>
 
-<!-- Victory screen -->
 <div id="victory">
   <div class="victory-box">
     <span class="victory-emoji" id="v-emoji">💖</span>
-    <div class="victory-title" id="v-title">Arrasou, Barbie!</div>
-    <div class="victory-sub">Você encontrou todos os pares</div>
+    <div class="victory-title" id="v-title">Arrasou!</div>
     <div class="victory-stars" id="v-stars"></div>
     <div class="victory-score" id="v-score"></div>
     <div class="victory-sub" id="v-detail"></div>
@@ -448,17 +429,8 @@
   const TIME_LIMITS = { 6: 60, 10: 90, 15: 140 };
 
   let state = {
-    pairs: 6,
-    cards: [],
-    flipped: [],
-    matched: 0,
-    attempts: 0,
-    score: 0,
-    locked: false,
-    timer: null,
-    elapsed: 0,
-    timeLimit: 60,
-    gameOver: false,
+    pairs: 6, cards: [], flipped: [], matched: 0, attempts: 0,
+    score: 0, locked: false, timer: null, elapsed: 0, timeLimit: 60, gameOver: false
   };
 
   function shuffle(arr) {
@@ -475,49 +447,40 @@
     return shuffle([...syms, ...syms].map((sym, i) => ({ id: i, sym, matched: false })));
   }
 
-  function calcCols(pairs) {
-    const total = pairs * 2;
-    if (total <= 12) return 4;
-    if (total <= 20) return 5;
-    return 6;
-  }
-
+  // LÓGICA DE PONTUAÇÃO CORRIGIDA
   function calcScore() {
-    const { pairs, attempts, elapsed, timeLimit } = state;
-    const perfect = pairs;
-    const accuracy = Math.max(0, 1 - (attempts - perfect) / (pairs * 3));
-    const timeBonus = Math.max(0, 1 - elapsed / timeLimit);
-    return Math.round((accuracy * 600) + (timeBonus * 400));
+    if (state.matched === 0) return 0;
+    // Ganha 100 pontos base por par encontrado
+    const basePoints = state.matched * 100;
+    // Bônus de precisão (penaliza tentativas erradas)
+    const accuracyBonus = Math.max(0, 200 - (state.attempts - state.matched) * 15);
+    // Bônus de tempo (apenas se ganhar o jogo)
+    let timeBonus = 0;
+    if (state.matched === state.pairs) {
+      timeBonus = Math.max(0, Math.round((1 - state.elapsed / state.timeLimit) * 500));
+    }
+    return basePoints + accuracyBonus + timeBonus;
   }
 
   function renderGrid() {
     const grid = document.getElementById('grid');
-    const cols = calcCols(state.pairs);
+    const totalCards = state.pairs * 2;
+    const cols = totalCards <= 12 ? 4 : (totalCards <= 20 ? 5 : 6);
     grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-    const cardW = Math.min(110, Math.floor((860 - 48 - (cols - 1) * 14) / cols));
-    grid.style.maxWidth = `${cols * (cardW + 14)}px`;
     grid.innerHTML = '';
 
     state.cards.forEach((c, idx) => {
       const div = document.createElement('div');
       div.className = 'card';
-      div.style.width = cardW + 'px';
       div.dataset.idx = idx;
-      div.innerHTML = `
-        <div class="card-inner">
-          <div class="card-face card-back"></div>
-          <div class="card-face card-front">${c.sym}</div>
-        </div>`;
+      div.innerHTML = `<div class="card-inner"><div class="card-face card-back"></div><div class="card-face card-front">${c.sym}</div></div>`;
       div.addEventListener('click', () => onCardClick(idx));
       grid.appendChild(div);
-      if (c.matched) { div.classList.add('flipped', 'matched'); }
     });
   }
 
   function onCardClick(idx) {
-    if (state.locked || state.gameOver) return;
-    if (state.flipped.includes(idx)) return;
-    if (state.cards[idx].matched) return;
+    if (state.locked || state.gameOver || state.flipped.includes(idx) || state.cards[idx].matched) return;
 
     const cardEl = document.querySelector(`.card[data-idx="${idx}"]`);
     cardEl.classList.add('flipped');
@@ -536,8 +499,8 @@
             document.querySelector(`.card[data-idx="${i}"]`).classList.add('matched');
           });
           state.matched++;
-          state.score = calcScore();
           updateStat('s-pairs', state.matched);
+          state.score = calcScore();
           bumpStat('s-score', state.score);
           state.flipped = [];
           state.locked = false;
@@ -548,101 +511,60 @@
           [a, b].forEach(i => {
             const el = document.querySelector(`.card[data-idx="${i}"]`);
             el.classList.add('shake');
-            setTimeout(() => { el.classList.remove('flipped', 'shake'); }, 400);
+            setTimeout(() => el.classList.remove('flipped', 'shake'), 400);
           });
           state.flipped = [];
           state.locked = false;
-          state.score = calcScore();
-          updateStat('s-score', state.score);
         }, 900);
       }
     }
   }
 
-  function updateStat(id, val) {
-    document.getElementById(id).textContent = val;
-  }
-
-  function bumpStat(id, val) {
-    const el = document.getElementById(id);
-    el.textContent = val;
-    el.classList.add('bump');
-    setTimeout(() => el.classList.remove('bump'), 200);
+  function updateStat(id, val) { document.getElementById(id).textContent = val; }
+  function bumpStat(id, val) { 
+    const el = document.getElementById(id); 
+    el.textContent = val; el.classList.add('bump'); 
+    setTimeout(() => el.classList.remove('bump'), 200); 
   }
 
   function startTimer() {
     clearInterval(state.timer);
     state.elapsed = 0;
     const bar = document.getElementById('timer-bar');
-    bar.style.width = '100%';
-    bar.classList.remove('danger');
-
     state.timer = setInterval(() => {
       state.elapsed++;
       updateStat('s-time', state.elapsed + 's');
       const pct = Math.max(0, 100 - (state.elapsed / state.timeLimit * 100));
       bar.style.width = pct + '%';
       if (pct < 25) bar.classList.add('danger');
-      if (state.elapsed >= state.timeLimit && !state.gameOver) finishGame(true);
+      if (state.elapsed >= state.timeLimit) finishGame(true);
     }, 1000);
   }
 
   function finishGame(timeout = false) {
     state.gameOver = true;
     clearInterval(state.timer);
-
-    if (!timeout) state.score = calcScore();
-    else state.score = Math.round(state.score * 0.4);
+    state.score = calcScore();
     updateStat('s-score', state.score);
 
-    const stars = timeout ? '💔' :
-      state.score >= 800 ? '⭐⭐⭐' :
-      state.score >= 500 ? '⭐⭐' : '⭐';
-
+    const stars = timeout ? '💔' : (state.score >= 1000 ? '⭐⭐⭐' : (state.score >= 600 ? '⭐⭐' : '⭐'));
     document.getElementById('v-stars').textContent = stars;
     document.getElementById('v-score').textContent = state.score + ' pts';
-    document.getElementById('v-detail').textContent = timeout
-      ? `Tempo esgotado! ${state.matched}/${state.pairs} pares em ${state.elapsed}s`
-      : `${state.matched} pares em ${state.attempts} tentativas · ${state.elapsed}s`;
-
-    if (timeout) {
-      document.getElementById('v-title').textContent = 'O Tempo Acabou!';
-      document.getElementById('v-emoji').textContent = '⏰';
-    } else {
-      document.getElementById('v-title').textContent = 'Arrasou, Barbie!';
-      document.getElementById('v-emoji').textContent = state.score >= 800 ? '👑' : '💖';
-    }
-
+    document.getElementById('v-detail').textContent = timeout ? "O tempo acabou!" : `Arrasou! Completou em ${state.elapsed}s`;
     document.getElementById('victory').classList.add('show');
   }
 
   function restartGame() {
     document.getElementById('victory').classList.remove('show');
-    clearInterval(state.timer);
-
-    state = {
-      pairs: state.pairs,
-      cards: buildCards(state.pairs),
-      flipped: [],
-      matched: 0,
-      attempts: 0,
-      score: 0,
-      locked: false,
-      timer: null,
-      elapsed: 0,
-      timeLimit: TIME_LIMITS[state.pairs],
-      gameOver: false,
-    };
-
-    updateStat('s-attempts', 0);
-    updateStat('s-pairs', 0);
-    updateStat('s-time', '0s');
-    updateStat('s-score', 0);
-
+    state.pairs = state.pairs; // Mantém a dificuldade atual
+    state.cards = buildCards(state.pairs);
+    state.flipped = []; state.matched = 0; state.attempts = 0; state.score = 0;
+    state.locked = false; state.elapsed = 0; state.gameOver = false;
+    state.timeLimit = TIME_LIMITS[state.pairs];
+    
+    updateStat('s-attempts', 0); updateStat('s-pairs', 0); updateStat('s-time', '0s'); updateStat('s-score', 0);
     const bar = document.getElementById('timer-bar');
-    bar.style.width = '100%';
-    bar.classList.remove('danger');
-
+    bar.style.width = '100%'; bar.classList.remove('danger');
     renderGrid();
     startTimer();
   }
@@ -656,11 +578,7 @@
     });
   });
 
-  // Init
-  state.cards = buildCards(state.pairs);
-  state.timeLimit = TIME_LIMITS[state.pairs];
-  renderGrid();
-  startTimer();
+  restartGame(); // Inicia o jogo
 </script>
 </body>
 </html>
